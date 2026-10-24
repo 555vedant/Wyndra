@@ -1,4 +1,4 @@
-import React, { memo, useMemo, useState } from "react";
+import React, { memo, useEffect, useMemo, useRef, useState } from "react";
 import axios from "axios";
 import "./App.css";
 import {
@@ -166,18 +166,211 @@ const METRIC_HINTS = {
   "Valid intervals": "Matched 30-min points",
 };
 
-// Decorative sky layer: fixed + transform-only animation keeps it off the main thread and out of layout.
-const SkyBackground = memo(function SkyBackground() {
+const clamp = (value, low, high) => Math.min(high, Math.max(low, value));
+
+// Smooth, swirling vector field: sums of slow sine waves give curling streamlines and drifting eddies.
+function flowAngle(x, y, t) {
+  return (
+    Math.sin(x * 0.0021 + t * 0.35) * 0.75 +
+    Math.cos(y * 0.0032 - t * 0.22) * 0.65 +
+    Math.sin((x + y) * 0.0011 + t * 0.12) * 0.5 -
+    0.1
+  );
+}
+
+const WIND_COLORS = ["#3a8fc7", "#1f78b4", "#2aa0b8", "#5aa9d6"];
+
+// Canvas wind: particles ride the flow field and leave fading trails (destination-out fade on a
+// transparent canvas, so the CSS sky shows through). Gusts surge periodically, the pointer stirs the
+// air, and `storm` (while loading) speeds everything up. Capped DPR + particle count, paused when the
+// tab is hidden, and a single static frame when the user prefers reduced motion.
+const WindCanvas = memo(function WindCanvas({ storm }) {
+  const canvasRef = useRef(null);
+  const stormRef = useRef(storm);
+
+  useEffect(() => {
+    stormRef.current = storm;
+  }, [storm]);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    const ctx = canvas && canvas.getContext ? canvas.getContext("2d") : null;
+    if (!ctx) return undefined;
+
+    let width = 0;
+    let height = 0;
+    let raf = 0;
+    let resizeRaf = 0;
+    let last = 0;
+    let time = 0;
+    let intensity = 1;
+    const particles = [];
+    const pointer = { x: -9999, y: -9999, vx: 0, vy: 0, lastT: 0 };
+
+    const spawn = (p, anywhere) => {
+      p.ttl = 3 + Math.random() * 5;
+      p.x = anywhere ? Math.random() * width : -30 - Math.random() * 120;
+      p.y = Math.random() * height;
+      p.px = p.x;
+      p.py = p.y;
+      p.life = anywhere ? Math.random() * p.ttl : 0;
+      p.speed = 0.6 + Math.random() * 0.9;
+      p.width = 0.7 + Math.random() * 1.9;
+      p.color = WIND_COLORS[(Math.random() * WIND_COLORS.length) | 0];
+      return p;
+    };
+
+    const resize = () => {
+      const dpr = Math.min(window.devicePixelRatio || 1, 1.5);
+      width = window.innerWidth;
+      height = window.innerHeight;
+      canvas.width = Math.round(width * dpr);
+      canvas.height = Math.round(height * dpr);
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      const target = Math.round(clamp((width * height) / 9000, 45, 170) * (width < 600 ? 0.6 : 1));
+      while (particles.length < target) particles.push(spawn({}, true));
+      particles.length = Math.min(particles.length, target);
+    };
+
+    const drawStatic = () => {
+      ctx.clearRect(0, 0, width, height);
+      ctx.lineCap = "round";
+      ctx.globalAlpha = 0.28;
+      particles.forEach((p) => {
+        let x = p.x;
+        let y = p.y;
+        ctx.beginPath();
+        ctx.moveTo(x, y);
+        for (let i = 0; i < 36; i += 1) {
+          const angle = flowAngle(x, y, 0);
+          x += Math.cos(angle) * 9;
+          y += Math.sin(angle) * 9;
+          ctx.lineTo(x, y);
+        }
+        ctx.strokeStyle = p.color;
+        ctx.lineWidth = p.width * 0.8;
+        ctx.stroke();
+      });
+      ctx.globalAlpha = 1;
+    };
+
+    const frame = (now) => {
+      raf = requestAnimationFrame(frame);
+      const dt = Math.min((now - (last || now)) / 1000, 0.05);
+      last = now;
+      time += dt;
+
+      intensity += ((stormRef.current ? 2.8 : 1) - intensity) * Math.min(1, dt * 2.5);
+      const gust = 1 + 0.9 * Math.pow(Math.max(0, Math.sin(time * 0.4)), 6);
+      pointer.vx *= 0.92;
+      pointer.vy *= 0.92;
+      const energy = Math.min(1, Math.hypot(pointer.vx, pointer.vy) / 500);
+
+      ctx.globalCompositeOperation = "destination-out";
+      ctx.globalAlpha = 1;
+      ctx.fillStyle = "rgba(0, 0, 0, 0.06)";
+      ctx.fillRect(0, 0, width, height);
+      ctx.globalCompositeOperation = "source-over";
+      ctx.lineCap = "round";
+
+      for (let i = 0; i < particles.length; i += 1) {
+        const p = particles[i];
+        p.life += dt;
+        if (p.life > p.ttl || p.x > width + 40 || p.y < -60 || p.y > height + 60) {
+          spawn(p, false);
+          continue;
+        }
+        const angle = flowAngle(p.x, p.y, time);
+        const pace = (90 + p.speed * 110) * intensity * gust;
+        let vx = Math.cos(angle) * pace;
+        let vy = Math.sin(angle) * pace;
+
+        const dx = p.x - pointer.x;
+        const dy = p.y - pointer.y;
+        const d2 = dx * dx + dy * dy;
+        if (d2 < 28900) {
+          const d = Math.sqrt(d2) || 1;
+          const f = (1 - d / 170) ** 2;
+          vx += (pointer.vx * 0.25 + (-dy / d) * 110 * energy) * f;
+          vy += (pointer.vy * 0.25 + (dx / d) * 110 * energy) * f;
+        }
+
+        p.px = p.x;
+        p.py = p.y;
+        p.x += vx * dt;
+        p.y += vy * dt;
+
+        ctx.globalAlpha = 0.6 * Math.sin(Math.PI * clamp(p.life / p.ttl, 0, 1));
+        ctx.strokeStyle = p.color;
+        ctx.lineWidth = p.width * (0.8 + 0.25 * intensity);
+        ctx.beginPath();
+        ctx.moveTo(p.px, p.py);
+        ctx.lineTo(p.x, p.y);
+        ctx.stroke();
+      }
+      ctx.globalAlpha = 1;
+    };
+
+    const onMove = (event) => {
+      const now = event.timeStamp || performance.now();
+      if (pointer.lastT && now - pointer.lastT < 200) {
+        const dtMs = Math.max(now - pointer.lastT, 8);
+        pointer.vx = clamp(pointer.vx * 0.5 + ((event.clientX - pointer.x) / dtMs) * 500, -1600, 1600);
+        pointer.vy = clamp(pointer.vy * 0.5 + ((event.clientY - pointer.y) / dtMs) * 500, -1600, 1600);
+      }
+      pointer.x = event.clientX;
+      pointer.y = event.clientY;
+      pointer.lastT = now;
+    };
+
+    const onVisibility = () => {
+      if (document.hidden) {
+        cancelAnimationFrame(raf);
+        raf = 0;
+      } else if (!raf) {
+        last = 0;
+        raf = requestAnimationFrame(frame);
+      }
+    };
+
+    const onResize = () => {
+      cancelAnimationFrame(resizeRaf);
+      resizeRaf = requestAnimationFrame(() => {
+        resize();
+        if (prefersReducedMotion) drawStatic();
+      });
+    };
+
+    resize();
+    window.addEventListener("resize", onResize);
+    if (prefersReducedMotion) {
+      drawStatic();
+    } else {
+      raf = requestAnimationFrame(frame);
+      window.addEventListener("pointermove", onMove, { passive: true });
+      document.addEventListener("visibilitychange", onVisibility);
+    }
+
+    return () => {
+      cancelAnimationFrame(raf);
+      cancelAnimationFrame(resizeRaf);
+      window.removeEventListener("resize", onResize);
+      window.removeEventListener("pointermove", onMove);
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
+  }, []);
+
+  return <canvas ref={canvasRef} className="wind-canvas" />;
+});
+
+// Decorative sky layer: fixed, pointer-transparent; clouds drift via transform, wind is the canvas above.
+const SkyBackground = memo(function SkyBackground({ storm }) {
   return (
     <div className="sky" aria-hidden="true">
       <span className="cloud cloud-1" />
       <span className="cloud cloud-2" />
       <span className="cloud cloud-3" />
-      <span className="streak streak-1" />
-      <span className="streak streak-2" />
-      <span className="streak streak-3" />
-      <span className="streak streak-4" />
-      <span className="streak streak-5" />
+      <WindCanvas storm={storm} />
     </div>
   );
 });
@@ -313,14 +506,12 @@ function App() {
 
   return (
     <main className="app-shell">
-      <SkyBackground />
+      <SkyBackground storm={loading} />
       <div className="dashboard">
         <header className="hero">
           <div className="brand-mark" aria-hidden="true"><WindGlyph className="brand-glyph" /></div>
           <div className="hero-text">
-            <p className="eyebrow">ELEXON • WIND INTELLIGENCE</p>
             <h1>Wind generation <span>forecast monitor</span></h1>
-            <p className="hero-copy">A clear view of UK national wind delivery intervals and day-ahead forecast accuracy.</p>
           </div>
         </header>
 
@@ -388,7 +579,6 @@ function App() {
             </>
           )}
         </div>
-        <footer className="footer">Wind forecast monitor <span>•</span> Data from Elexon BMRS</footer>
       </div>
     </main>
   );

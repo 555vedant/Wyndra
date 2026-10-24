@@ -63,32 +63,11 @@
 .cloud-2 { top: 38%; width: 300px; opacity: 0.7; animation-duration: 210s; animation-delay: -150s; }
 .cloud-3 { top: 72%; width: 420px; opacity: 0.6; animation-duration: 260s; animation-delay: -90s; }
 
-.streak {
-  position: absolute;
-  left: 0;
-  height: 2px;
-  width: 240px;
-  border-radius: 2px;
-  opacity: 0;
-  will-change: transform, opacity;
-  background: linear-gradient(90deg, transparent, rgba(72, 145, 190, 0.38), transparent);
-  animation: streak 16s linear infinite;
-}
-.streak-1 { top: 14%; animation-delay: -3s; }
-.streak-2 { top: 31%; width: 320px; animation-duration: 21s; animation-delay: -11s; }
-.streak-3 { top: 55%; width: 200px; animation-duration: 18s; animation-delay: -7s; }
-.streak-4 { top: 73%; width: 280px; animation-duration: 24s; animation-delay: -16s; }
-.streak-5 { top: 90%; animation-duration: 19s; animation-delay: -1s; }
+.wind-canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
 
 @keyframes cloud-drift {
   from { transform: translate3d(-420px, 0, 0); }
   to { transform: translate3d(calc(100vw + 60px), 0, 0); }
-}
-@keyframes streak {
-  0% { transform: translate3d(-340px, 0, 0); opacity: 0; }
-  12% { opacity: 1; }
-  88% { opacity: 1; }
-  100% { transform: translate3d(calc(100vw + 40px), 0, 0); opacity: 0; }
 }
 
 /* ---------- Hero ---------- */
@@ -274,17 +253,16 @@
   .pill-row { justify-content: flex-start; margin-top: 12px; }
   .chart-wrap { height: 330px; }
   .error-chart-wrap { height: 300px; }
-  .cloud-3, .streak-4, .streak-5 { display: none; }
+  .cloud-3 { display: none; }
 }
 
 /* ---------- Reduced motion: keep the look, drop the movement ---------- */
 
 @media (prefers-reduced-motion: reduce) {
-  .cloud, .streak, .flow, .loading-bar::after, .skeleton-line::after, .skeleton-block::after, .results > * { animation: none; }
+  .cloud, .flow, .loading-bar::after, .skeleton-line::after, .skeleton-block::after, .results > * { animation: none; }
   .cloud-1 { transform: translate3d(8vw, 0, 0); }
   .cloud-2 { transform: translate3d(58vw, 0, 0); }
   .cloud-3 { transform: translate3d(28vw, 0, 0); }
-  .streak { opacity: 0.6; transform: translate3d(30vw, 0, 0); }
   .flow { stroke-dasharray: none; }
   .loading-bar::after { width: 100%; opacity: 0.5; }
   .skeleton-line::after, .skeleton-block::after { display: none; }
