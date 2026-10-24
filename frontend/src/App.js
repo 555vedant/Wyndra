@@ -79,7 +79,7 @@ export function normaliseResponse(payload) {
         valid_intervals: errors.length,
       }
     : { mae: null, rmse: null, bias: null, valid_intervals: 0 };
-  return { data, metrics };
+  return { data, metrics, quality: payload?.quality || null };
 }
 
 export function buildChartData(data) {
@@ -123,18 +123,23 @@ function App() {
   };
 
   const data = result?.data || [];
+  const selectionStages = result?.quality?.selection_stages;
+  const noEligibleForecasts = Boolean(
+    selectionStages && selectionStages.horizon_eligible_records === 0,
+  );
+  const maxAvailableHorizon = selectionStages?.max_day_ahead_lead_hours;
   const chartData = buildChartData(data);
   const comparison = {
     ...chartData.comparison,
     datasets: [
       { ...chartData.comparison.datasets[0], borderColor: "#2563eb", backgroundColor: "#2563eb", pointRadius: 0 },
-      {
+      ...(!noEligibleForecasts ? [{
         ...chartData.comparison.datasets[1],
         borderColor: "#16a34a",
         backgroundColor: "#16a34a",
         pointRadius: 2,
         spanGaps: true,
-      },
+      }] : []),
     ],
   };
   const { errorLabels, errors } = chartData;
@@ -163,7 +168,7 @@ function App() {
       },
     ],
   };
-  const metrics = result?.metrics;
+  const metrics = noEligibleForecasts ? null : result?.metrics;
 
   return (
     <main style={{ fontFamily: "sans-serif", padding: 30, maxWidth: 1100, margin: "0 auto" }}>
@@ -181,6 +186,13 @@ function App() {
       {error && <p role="alert" style={{ color: "#b91c1c" }}>{error}</p>}
       {loading && <p aria-live="polite">Loading Elexon actuals and forecasts...</p>}
       {result && data.length === 0 && <p>No actual intervals were returned for this date range.</p>}
+      {noEligibleForecasts && (
+        <p role="status" style={{ color: "#92400e" }}>
+          No forecast data is available for the selected {horizon}h minimum horizon.
+          The maximum available day-ahead horizon is {maxAvailableHorizon == null ? "unknown" : `${maxAvailableHorizon.toFixed(1)}h`}.
+          Actual generation remains visible; forecast comparisons and metrics are hidden.
+        </p>
+      )}
 
       {metrics && (
         <section aria-label="Forecast accuracy metrics" style={{ display: "flex", gap: 16, flexWrap: "wrap", marginBottom: 25 }}>
@@ -194,11 +206,11 @@ function App() {
 
       {data.length > 0 && (
         <>
-          <section aria-label="Actual and forecast generation chart" style={{ border: "1px solid #d1d5db", borderRadius: 8, padding: 18, marginTop: 10 }}>
-            <h2 style={{ margin: "0 0 16px" }}>Actual vs forecast generation</h2>
+          <section aria-label={noEligibleForecasts ? "Actual generation chart" : "Actual and forecast generation chart"} style={{ border: "1px solid #d1d5db", borderRadius: 8, padding: 18, marginTop: 10 }}>
+            <h2 style={{ margin: "0 0 16px" }}>{noEligibleForecasts ? "Actual generation" : "Actual vs forecast generation"}</h2>
             <div style={{ height: 420 }}><Line data={comparison} options={chartOptions("Actual and forecast generation")} /></div>
           </section>
-          {errors.length > 0 ? (
+          {!noEligibleForecasts && errors.length > 0 ? (
             <section aria-label="Forecast error chart" style={{ border: "1px solid #fecaca", borderRadius: 8, padding: 18, marginTop: 30 }}>
               <h2 style={{ color: "#b91c1c", margin: "0 0 16px" }}>Forecast error over time</h2>
               <p style={{ marginTop: 0 }}>Error = forecast minus actual (MW).</p>

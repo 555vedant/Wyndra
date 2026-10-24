@@ -52,3 +52,26 @@ test("passes the latest horizon slider value when loading data", async () => {
     expect.objectContaining({ params: { start: "2026-01-01", end: "2026-01-31", horizon: 107 } }),
   );
 });
+
+test("keeps actuals visible and hides forecast KPIs when no horizon is eligible", async () => {
+  axios.get.mockResolvedValue({
+    data: {
+      data: [{ time: "2026-01-01T00:00:00Z", actual: 100, forecast: null }],
+      metrics: { mae: null, rmse: null, bias: null, valid_intervals: 0 },
+      quality: {
+        selection_stages: {
+          horizon_eligible_records: 0,
+          max_day_ahead_lead_hours: 66.5,
+        },
+      },
+    },
+  });
+  render(<App />);
+  fireEvent.change(screen.getByRole("slider"), { target: { value: "107" } });
+  fireEvent.click(screen.getByRole("button", { name: /load data/i }));
+
+  expect(await screen.findByRole("status")).toHaveTextContent("maximum available day-ahead horizon is 66.5h");
+  expect(screen.getByRole("heading", { name: "Actual generation" })).toBeInTheDocument();
+  expect(screen.queryByLabelText("Forecast accuracy metrics")).not.toBeInTheDocument();
+  expect(screen.queryByRole("heading", { name: "Forecast error over time" })).not.toBeInTheDocument();
+});
