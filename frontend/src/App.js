@@ -15,7 +15,7 @@ import { Line } from "react-chartjs-2";
 
 ChartJS.register(LineElement, PointElement, LinearScale, CategoryScale, Legend, Tooltip, Filler);
 
-const API_URL = process.env.REACT_APP_API_URL || "http://127.0.0.1:8000";
+const API_URL = process.env.REACT_APP_API_URL || "https://wyndra.onrender.com";
 const MAX_HORIZON = 168;
 const EMPTY_ROWS = [];
 

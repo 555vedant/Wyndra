@@ -59,8 +59,9 @@ npm install
 npm start
 ```
 
-The frontend defaults to `http://127.0.0.1:8000`. Set
-`REACT_APP_API_URL` when the backend is hosted elsewhere.
+The frontend defaults to `https://wyndra.onrender.com`. Set
+`REACT_APP_API_URL` to override the backend URL, for example when running
+against a local backend.
 
 ## Docker
 
@@ -86,7 +87,7 @@ npm run build
 The existing sample deployments are:
 
 - Frontend: https://wind-forecast-app-sigma.vercel.app/
-- Backend: https://wind-forecast-backend-32c2.onrender.com
+- Backend: https://wyndra.onrender.com
 - Demo: https://youtu.be/6VKA-zeY0AU
 
 After code changes, redeploy both services and verify the frontend
