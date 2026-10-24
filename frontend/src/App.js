@@ -71,14 +71,14 @@ export function normaliseResponse(payload) {
     (item) => item.actual !== null && item.forecast !== null,
   );
   const errors = matched.map((item) => Number(item.forecast) - Number(item.actual));
-  const metrics = payload?.metrics || (errors.length
+  const metrics = errors.length
     ? {
         mae: errors.reduce((sum, value) => sum + Math.abs(value), 0) / errors.length,
         rmse: Math.sqrt(errors.reduce((sum, value) => sum + value ** 2, 0) / errors.length),
         bias: errors.reduce((sum, value) => sum + value, 0) / errors.length,
         valid_intervals: errors.length,
       }
-    : { mae: null, rmse: null, bias: null, valid_intervals: 0 });
+    : { mae: null, rmse: null, bias: null, valid_intervals: 0 };
   return { data, metrics };
 }
 

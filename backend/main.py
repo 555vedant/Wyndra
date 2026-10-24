@@ -5,7 +5,7 @@ from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 
 from data_fetcher import fetch_actual, fetch_forecast
-from forecast_selector import calculate_metrics, select_forecast
+from forecast_selector import calculate_metrics, select_forecast, selection_diagnostics
 
 app = FastAPI()
 
@@ -41,7 +41,8 @@ def get_wind_data(
 
     try:
         actual = fetch_actual(start, end)
-        forecast = fetch_forecast(start, end)
+        forecast = fetch_forecast(start, end, horizon)
+        diagnostics = selection_diagnostics(actual, forecast, horizon)
         selected = select_forecast(actual, forecast, horizon)
     except (ValueError, KeyError, TypeError, OSError, requests.RequestException) as exc:
         raise HTTPException(status_code=502, detail=f"Unable to retrieve Elexon data: {exc}") from exc
@@ -52,15 +53,25 @@ def get_wind_data(
     merged = actual.merge(selected, on="time", how="left")
     merged = merged.sort_values("time")
     metrics = calculate_metrics(merged)
+    matched_intervals = int(merged["forecast"].notna().sum())
     merged = merged.replace({np.nan: None})
     merged["time"] = merged["time"].map(lambda value: value.isoformat() if value is not None else None)
 
     return {
         "data": merged.to_dict(orient="records"),
         "metrics": metrics,
+        "quality": {
+            "actual_intervals": int(len(actual)),
+            "forecast_records": int(len(forecast)),
+            "forecast_delivery_timestamps": int(forecast["time"].nunique()),
+            "selected_forecasts": int(len(selected)),
+            "matched_intervals": matched_intervals,
+            "unmatched_actual_intervals": int(len(actual) - matched_intervals),
+            "selection_stages": diagnostics,
+        },
         "assumptions": {
             "decision_cutoff": "00:00 UTC on the day before delivery",
-            "selection": "latest publishTime at or before the cutoff and requested horizon",
+            "selection": "latest publishTime at or before both the day-ahead cutoff and startTime minus the selected horizon",
             "scope": "delivery intervals in January 2026",
         },
     }

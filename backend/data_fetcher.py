@@ -1,3 +1,5 @@
+import math
+
 import requests
 import pandas as pd
 
@@ -11,7 +13,8 @@ def _numeric_value(value):
     if value is None or value == "":
         return None
     try:
-        return float(value)
+        number = float(value)
+        return number if math.isfinite(number) else None
     except (TypeError, ValueError):
         return None
 
@@ -40,15 +43,17 @@ def fetch_actual(start, end):
             rows.append({"time": item["startTime"], "actual": generation})
     return (
         pd.DataFrame(rows, columns=["time", "actual"])
-        .assign(time=lambda frame: pd.to_datetime(frame["time"], utc=True))
+        .assign(time=lambda frame: pd.to_datetime(frame["time"], utc=True, errors="coerce"))
+        .dropna(subset=["time"])
         .drop_duplicates(subset=["time"], keep="last")
         .sort_values("time")
         .reset_index(drop=True)
     )
 
 
-def fetch_forecast(start, end):
-    start_date = pd.Timestamp(start, tz="UTC") - pd.Timedelta(days=2)
+def fetch_forecast(start, end, horizon=24):
+    publication_lookback_days = max(2, math.ceil(float(horizon) / 24))
+    start_date = pd.Timestamp(start, tz="UTC") - pd.Timedelta(days=publication_lookback_days)
     params = {
         "publishDateTimeFrom": start_date.isoformat().replace("+00:00", "Z"),
         "publishDateTimeTo": end + "T23:59:00Z"
@@ -67,9 +72,10 @@ def fetch_forecast(start, end):
     return (
         pd.DataFrame(rows, columns=["time", "publishTime", "forecast"])
         .assign(
-            time=lambda frame: pd.to_datetime(frame["time"], utc=True),
-            publishTime=lambda frame: pd.to_datetime(frame["publishTime"], utc=True),
+            time=lambda frame: pd.to_datetime(frame["time"], utc=True, errors="coerce"),
+            publishTime=lambda frame: pd.to_datetime(frame["publishTime"], utc=True, errors="coerce"),
         )
+        .dropna(subset=["time", "publishTime"])
         .drop_duplicates(subset=["time", "publishTime", "forecast"])
         .sort_values(["time", "publishTime"])
         .reset_index(drop=True)

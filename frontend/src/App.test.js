@@ -38,3 +38,17 @@ test("keeps actual and forecast aligned by UTC time and calculates forecast minu
   expect(chart.comparison.datasets[1].data).toEqual([null, 120]);
   expect(chart.errors).toEqual([20]);
 });
+
+test("passes the latest horizon slider value when loading data", async () => {
+  axios.get.mockResolvedValue({ data: { data: [], metrics: { valid_intervals: 0 } } });
+  render(<App />);
+
+  fireEvent.change(screen.getByRole("slider"), { target: { value: "107" } });
+  fireEvent.click(screen.getByRole("button", { name: /load data/i }));
+
+  await screen.findByText(/No actual intervals/i);
+  expect(axios.get).toHaveBeenLastCalledWith(
+    expect.stringContaining("/wind-data"),
+    expect.objectContaining({ params: { start: "2026-01-01", end: "2026-01-31", horizon: 107 } }),
+  );
+});
