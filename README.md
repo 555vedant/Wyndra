@@ -97,7 +97,7 @@ npm run build
 
 ## Demo Video
 
-[Watch the demo](https://youtu.be/6VKA-zeY0AU)
+[Watch the demo](https://drive.google.com/file/d/1_qa76W1lrlgyjNBEQ72mc6-ZIPKM1Chn/view?usp=drive_link)
 
 ## AI Disclosure
 
